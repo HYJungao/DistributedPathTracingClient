@@ -112,7 +112,7 @@ App::App(std::vector<std::string>& cmd_args)
 	m_window.addListener(this);
 	m_window.addListener(&m_commonCtrl);
 
-	m_window.setTitle("Assignment 3");
+	m_window.setTitle("Client");
 	m_commonCtrl.setStateFilePrefix("state_assignment3_");
 
 	m_window.setSize(Vec2i(800, 600));
@@ -466,7 +466,7 @@ bool App::handleEvent(const Window::Event& ev)
 			Vec3f nn;
 			Vec3f position;
 			for (int i = 0; i < m_numDebugPathCount; ++i)
-				m_pathtrace_renderer->tracePath(pos.x, pos.y, m_pathtrace_renderer->m_context, -1, rnd, m_visualization, nn, position);
+				m_pathtrace_renderer->tracePath(pos.x, pos.y, m_pathtrace_renderer->m_context, -1, rnd, m_visualization, nn, position, Mat4f(0));
 
 			m_pathtrace_renderer->debugVis = false;
 			m_RTMode = false;
@@ -679,8 +679,9 @@ void App::renderFrame(GLContext* gl)
 void App::renderScene(GLContext* gl, const Mat4f& worldToCamera, const Mat4f& projection)
 {
 	// Draw mesh.
-	if (m_mesh)
+	if (m_mesh) {
 		m_mesh->draw(gl, worldToCamera, projection);
+	}
 }
 
 

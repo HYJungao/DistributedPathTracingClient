@@ -99,7 +99,7 @@ public:
     // negative #bounces = -N means start russian roulette from Nth bounce
     // positive N means always trace up to N bounces
     void				startPathTracingProcess				( const MeshWithColors* scene, AreaLight*, RayTracer* rt, Image* dest, int bounces, const CameraControls& camera );
-	static Vec3f				tracePath(float x, float y, PathTracerContext& ctx, int samplerBase, Random& rnd, std::vector<PathVisualizationNode>& visualization, Vec3f& nn, Vec3f& pos);
+	static Vec3f		tracePath(float x, float y, PathTracerContext& ctx, int samplerBase, Random& rnd, std::vector<PathVisualizationNode>& visualization, Vec3f& nn, Vec3f& pos, Mat4f& invP);
 	static void			pathTraceBlock(MulticoreLauncher::Task& t);
 	static void			getTextureParameters(const RaycastResult& hit, Vec3f& diffuse, Vec3f& n, Vec3f& specular);
     void				updatePicture						( Image* display );	// normalize by 1/w

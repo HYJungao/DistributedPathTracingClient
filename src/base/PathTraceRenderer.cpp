@@ -155,7 +155,7 @@ Vec3f PathTraceRenderer::evalMat(const Vec3f& diffuse, const Vec3f& specular, co
 
 // This function traces a single path and returns the resulting color value that will get rendered on the image. 
 // Filling in the blanks here is all you need to do this time around.
-Vec3f PathTraceRenderer::tracePath(float image_x, float image_y, PathTracerContext& ctx, int samplerBase, Random& R, std::vector<PathVisualizationNode>& visualization, Vec3f& nn, Vec3f& pos)
+Vec3f PathTraceRenderer::tracePath(float image_x, float image_y, PathTracerContext& ctx, int samplerBase, Random& R, std::vector<PathVisualizationNode>& visualization, Vec3f& nn, Vec3f& pos, Mat4f& invP)
 {
 	const MeshWithColors* scene = ctx.m_scene;
 	RayTracer* rt = ctx.m_rt;
@@ -170,11 +170,8 @@ Vec3f PathTraceRenderer::tracePath(float image_x, float image_y, PathTracerConte
 	Mat4f worldToCamera = cameraCtrl.getWorldToCamera();
 	Mat4f projection = Mat4f::fitToView(Vec2f(-1, -1), Vec2f(2, 2), image->getSize())*cameraCtrl.getCameraToClip();
 
-	// inverse projection from clip space to world space
-	Mat4f invP = (projection * worldToCamera).inverted();
-
-
 	// Simple ray generation code, you can use this if you want to.
+    //Mat4f invP = (projection * worldToCamera).inverted();
 
 	// Generate a ray through the pixel.
 	float x = (float)image_x / image->getSize().x *  2.0f - 1.0f;
@@ -202,109 +199,36 @@ Vec3f PathTraceRenderer::tracePath(float image_x, float image_y, PathTracerConte
     Vec3f throughput(1.f);
 	Vec3f Ei(0.f);
 
-    int bounce = 0;
-    bool RR = ctx.m_bounces < 0 ? true : false;
+    RaycastResult result = rt->raycast(Ro, Rd);
+    if (result.tri == nullptr) {
+        return Ei;
+    }
 
-    while (bounce <= FW::abs(ctx.m_bounces) || RR) {
-        RaycastResult result = rt->raycast(Ro, Rd);
-        if (result.tri == nullptr) {
-            break;
-        }
+    // YOUR CODE HERE (R2-R4):
+    // Implement path tracing with direct light and shadows, scattering and Russian roulette.
+    Vec3f diffuse;
+    Vec3f n;
+    Vec3f specular;
+    getTextureParameters(result, diffuse, n, specular);
 
-        // YOUR CODE HERE (R2-R4):
-        // Implement path tracing with direct light and shadows, scattering and Russian roulette.
-        Vec3f diffuse;
-        Vec3f n;
-        Vec3f specular;
-        getTextureParameters(result, diffuse, n, specular);
+    if (FW::dot(Rd, n) > 0) {
+        n = -n;
+    }
 
-        if (FW::dot(Rd, n) > 0) {
-            n = -n;
-        }
+    nn = n;
+    pos = result.point + n * 0.001;
 
-        if (bounce == 0) {
-            nn = n;
-            pos = result.point + n * 0.001;
-        }
-
-        float lightPdf;
-        Vec3f lightHitPoint;
-        light->sample(lightPdf, lightHitPoint, 0, R);
-        Vec3f hit = result.point + n * 0.001;
-        Vec3f hit2Light = lightHitPoint - hit;
-        RaycastResult blockCheck = rt->raycast(hit, hit2Light);
-        Vec3f brdf = evalMat(diffuse, specular, n, hit2Light, Rd, result.tri->m_material->glossiness);
-        if (blockCheck.tri == nullptr) {
-            float cosTheta = FW::clamp(FW::dot(hit2Light.normalized(), -light->getNormal()), 0.0f, 1.0f);
-            float cosThetaY = FW::clamp(FW::dot(hit2Light.normalized(), n), 0.0f, 1.0f);
-            Ei += throughput * brdf * light->getEmission() * cosTheta * cosThetaY / (hit2Light.lenSqr() * lightPdf + 0.00001);
-        }
-
-        Mat3f B = formBasis(n);
-        if (R.getF32(0.f, 1.f) < 0.3f) {
-            float x = R.getF32(0, 1);
-            float y = R.getF32(0, 1);
-            float z = FW::abs(1.0f - 2.0f * x);
-
-            float r = FW::sqrt(1.0f - z * z);
-            float phi = 2 * FW_PI * y;
-
-            Rd = B * Vec3f(r * FW::cos(phi), r * FW::sin(phi), z) * (*ctx.m_camera).getFar();
-            Ro = hit;
-
-            float pdf = 1 / (2 * FW_PI);
-            throughput *= brdf * FW::abs(FW::dot(n, Rd.normalized())) / (pdf + 0.00001);
-        }
-        else
-        {
-            float x = R.getF32(0, 1);
-            float y = R.getF32(0, 1);
-
-            float roughness = 1 - result.tri->m_material->glossiness / 255.f;
-            float a = roughness * roughness;
-            float phi = 2 * FW_PI * x;
-            float cosTheta = sqrt((1.0 - y) / (1.0 + (a * a - 1.0) * y));
-            float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
-            Vec3f H(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-            H = B * H;
-            Vec3f V = -Rd.normalized();
-            float tmpVoH = FW::max(dot(V, H), 0.0f);
-            Vec3f dir = (2.f * tmpVoH * H - V).normalized();
-
-            Rd = dir * (*ctx.m_camera).getFar();
-            Ro = hit;
-
-            float d = (cosTheta * a - cosTheta) * cosTheta + 1;
-            float D = a / (FW_PI * d * d);
-            float pdf = D * cosTheta;
-            pdf = pdf / (4.f * tmpVoH);
-            throughput *= brdf * FW::abs(FW::dot(n, Rd.normalized())) / (pdf + 0.00001);
-        }
-
-        if (bounce > FW::abs(ctx.m_bounces)) {
-            if (!RR) {
-                break;
-            }
-            if (R.getF32(0.f, 1.f) < 0.2f) {
-                throughput *= 1.f / 0.2f;
-            }
-            else {
-                break;
-            }
-        }
-        bounce++;
-
-        if (debugVis)
-        {
-            // Example code for using the visualization system. You can expand this to include further bounces, 
-            // shadow rays, and whatever other useful information you can think of.
-            PathVisualizationNode node;
-            node.lines.push_back(PathVisualizationLine(result.orig, result.point)); // Draws a line between two points
-            node.lines.push_back(PathVisualizationLine(result.point, result.point + result.tri->normal() * .1f, Vec3f(1, 0, 0))); // You can give lines a color as optional parameter.
-            node.labels.push_back(PathVisualizationLabel("diffuse: " + std::to_string(Ei.x) + ", " + std::to_string(Ei.y) + ", " + std::to_string(Ei.z), result.point)); // You can also render text labels with world-space locations.
-
-            visualization.push_back(node);
-        }
+    float lightPdf;
+    Vec3f lightHitPoint;
+    light->sample(lightPdf, lightHitPoint, 0, R);
+    Vec3f hit = result.point + n * 0.001;
+    Vec3f hit2Light = lightHitPoint - hit;
+    RaycastResult blockCheck = rt->raycast(hit, hit2Light);
+    Vec3f brdf = evalMat(diffuse, specular, n, hit2Light, Rd, result.tri->m_material->glossiness);
+    if (blockCheck.tri == nullptr) {
+        float cosTheta = FW::clamp(FW::dot(hit2Light.normalized(), -light->getNormal()), 0.0f, 1.0f);
+        float cosThetaY = FW::clamp(FW::dot(hit2Light.normalized(), n), 0.0f, 1.0f);
+        Ei += throughput * brdf * light->getEmission() * cosTheta * cosThetaY / (hit2Light.lenSqr() * lightPdf + 0.00001);
     }
 
 	return Ei;
@@ -360,7 +284,7 @@ void PathTraceRenderer::pathTraceBlock( MulticoreLauncher::Task& t )
         Vec3f pos(0);
 
         for (int k = 0; k < spp; ++k) {
-            Ei += tracePath(pixel_x, pixel_y, ctx, 0, R, dummyVisualization, n, pos) / spp;
+            Ei += tracePath(pixel_x, pixel_y, ctx, 0, R, dummyVisualization, n, pos, invP) / spp;
         }
 
         // Put pixel.
@@ -502,6 +426,7 @@ void PathTraceRenderer::updatePicture( Image* dest )
     }
     else
     {
+#pragma omp parallel for
         for (int i = 0; i < dest->getSize().y; ++i)
         {
             for (int j = 0; j < dest->getSize().x; ++j)
@@ -540,19 +465,19 @@ void PathTraceRenderer::checkFinish()
         //File outfile( fn, File::Create );
         //exportLodePngImage( outfile, m_context.m_destImage );
 
-        if ( !m_context.m_bForceExit )
-        {
-            // keep going
+        //if ( !m_context.m_bForceExit )
+        //{
+        //    // keep going
 
-            // If you change this, change the one in startPathTracingProcess too.
-            m_launcher.setNumThreads(m_launcher.getNumCores());
-            //m_launcher.setNumThreads(1);
+        //    // If you change this, change the one in startPathTracingProcess too.
+        //    m_launcher.setNumThreads(m_launcher.getNumCores());
+        //    //m_launcher.setNumThreads(1);
 
-            m_launcher.popAll();
-            m_launcher.push( pathTraceBlock, &m_context, 0, (int)m_context.m_blocks.size() );
-            //::printf( "Next pass!" );
-        }
-        else ::printf( "Stopped." );
+        //    m_launcher.popAll();
+        //    m_launcher.push( pathTraceBlock, &m_context, 0, (int)m_context.m_blocks.size() );
+        //    //::printf( "Next pass!" );
+        //}
+        //else ::printf( "Stopped." );
     }
 }
 

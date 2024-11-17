@@ -363,3 +363,5 @@ MigrationBackup/
 FodyWeavers.xsd
 /build/x64_Debug
 /build/x64_Release
+
+/gstreamer/
