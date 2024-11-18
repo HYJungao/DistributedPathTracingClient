@@ -14,6 +14,12 @@
 namespace FW
 {
 
+struct pColor {
+    F32 r;
+    F32 g;
+    F32 b;
+};
+
 //------------------------------------------------------------------------
 
 typedef Mesh<VertexPNTC>	MeshWithColors;
@@ -103,6 +109,8 @@ public:
 	static void			pathTraceBlock(MulticoreLauncher::Task& t);
 	static void			getTextureParameters(const RaycastResult& hit, Vec3f& diffuse, Vec3f& n, Vec3f& specular);
     void				updatePicture						( Image* display );	// normalize by 1/w
+    void				blendFrame(Image* display);
+    void				denoise                             (Image* display);
     void				checkFinish							( void );
     void				stop								( void );
 	void				setNormalMapped						( bool b ){ m_normalMapped = b; }
@@ -124,6 +132,10 @@ protected:
     static int                  m_spp;
 
     static float                m_revPI;
+
+public:
+    bool m_notDenoised = false;
+    std::vector<pColor> pixelColor;
 };
 
 }	// namespace FW

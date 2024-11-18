@@ -7,8 +7,6 @@
 #include <algorithm>
 #include <string>
 
-
-
 namespace FW {
 
 	bool PathTraceRenderer::m_normalMapped = false;
@@ -108,7 +106,6 @@ PathTracerContext::PathTracerContext()
 PathTracerContext::~PathTracerContext()
 {
 }
-
 
 PathTraceRenderer::PathTraceRenderer()
 {
@@ -350,6 +347,8 @@ void PathTraceRenderer::startPathTracingProcess( const MeshWithColors* scene, Ar
 
     dest->clear();
 
+    m_notDenoised = true;
+
     // Fire away!
 
     // If you change this, change the one in checkFinish too.
@@ -360,18 +359,15 @@ void PathTraceRenderer::startPathTracingProcess( const MeshWithColors* scene, Ar
     m_launcher.push( pathTraceBlock, &m_context, 0, (int)m_context.m_blocks.size() );
 }
 
-void PathTraceRenderer::updatePicture( Image* dest )
+void PathTraceRenderer::blendFrame(Image* dest)
 {
-    FW_ASSERT( m_context.m_image != 0 );
-    FW_ASSERT( m_context.m_image->getSize() == dest->getSize() );
-
     if (m_JBF) {
         int kernel = m_kernel;
         constexpr float inv_sigmaPlane = 1.f / (2.f * 0.1f * 0.1f);
         constexpr float inv_sigmaColor = 1.f / (2.f * 0.6f * 0.6f);
         constexpr float inv_sigmaNormal = 1.f / (2.f * 0.1f * 0.1f);
         constexpr float inv_sigmaCoord = 1.f / (2.f * 32.0f * 32.0f);
-
+    
 #pragma omp parallel for
         for (int i = 0; i < dest->getSize().y; ++i)
         {
@@ -382,36 +378,40 @@ void PathTraceRenderer::updatePicture( Image* dest )
                 int y_start = max(0, i - kernel);
                 int y_end = min(dest->getSize().y - 1, i + kernel);
 
+                // Vec4f indirColor(pixelColor[j * dest->getSize().y + i].r, pixelColor[j * dest->getSize().y + i].g, pixelColor[j * dest->getSize().y + i].b, 0);
+    
                 Vec4f cc = m_context.m_image->getVec4f(Vec2i(j, i));
+                // cc += indirColor;
                 Vec3f nn = m_context.m_normal->getVec4f(Vec2i(j, i)).getXYZ();
                 Vec3f pos = m_context.m_position->getVec4f(Vec2i(j, i)).getXYZ();
                 Vec4f D(0);
                 float D_weight = 0;
-
+    
                 for (int x = x_start; x <= x_end; x++) {
                     for (int y = y_start; y <= y_end; y++) {
                         Vec4f tmp_cc = m_context.m_image->getVec4f(Vec2i(x, y));
+                        // tmp_cc += Vec4f(pixelColor[x * dest->getSize().y + y].r, pixelColor[x * dest->getSize().y + y].g, pixelColor[x * dest->getSize().y + y].b, 0);
                         Vec3f tmp_nn = m_context.m_normal->getVec4f(Vec2i(x, y)).getXYZ();
                         Vec3f tmp_pos = m_context.m_position->getVec4f(Vec2i(x, y)).getXYZ();
                         float dis_pos = (Vec2i(j, i) - Vec2i(x, y)).lenSqr() * inv_sigmaCoord;
                         float dis_color = (cc - tmp_cc).lenSqr() * inv_sigmaColor;
                         float dis_n = acos(min(max(dot(nn, tmp_nn), 0.f), 1.f));
                         dis_n = dis_n * dis_n * inv_sigmaNormal;
-
+    
                         float D_plane = D_plane = dot(nn, (tmp_pos - pos).normalized());
                         D_plane = D_plane * D_plane * inv_sigmaPlane;
-
+    
                         float weight = exp(-D_plane - dis_pos - dis_color - dis_n);
                         D_weight += weight;
                         D += tmp_cc * weight;
                     }
                 }
-
-                D = D.lenSqr() == 0 ? m_context.m_image->getVec4f(Vec2i(j, i)) : D / D_weight;
-
+    
+                D = D.lenSqr() == 0 ? cc : D / D_weight;
+    
                 if (D.w != 0.0f)
                     D = D * (1.0f / D.w);
-
+    
                 // Gamma correction.
                 Vec4f color = Vec4f(
                     FW::pow(D.x, 1.0f / 2.2f),
@@ -419,7 +419,7 @@ void PathTraceRenderer::updatePicture( Image* dest )
                     FW::pow(D.z, 1.0f / 2.2f),
                     D.w
                 );
-
+    
                 dest->setVec4f(Vec2i(j, i), color);
             }
         }
@@ -432,9 +432,14 @@ void PathTraceRenderer::updatePicture( Image* dest )
             for (int j = 0; j < dest->getSize().x; ++j)
             {
                 Vec4f D = m_context.m_image->getVec4f(Vec2i(j, i));
+
+                D.x += pixelColor[j * dest->getSize().y + i].r;
+                D.y += pixelColor[j * dest->getSize().y + i].g;
+                D.z += pixelColor[j * dest->getSize().y + i].b;
+
                 if (D.w != 0.0f)
                     D = D * (1.0f / D.w);
-
+    
                 // Gamma correction.
                 Vec4f color = Vec4f(
                     FW::pow(D.x, 1.0f / 2.2f),
@@ -442,7 +447,180 @@ void PathTraceRenderer::updatePicture( Image* dest )
                     FW::pow(D.z, 1.0f / 2.2f),
                     D.w
                 );
+    
+                dest->setVec4f(Vec2i(j, i), color);
+            }
+        }
+    }
+}
 
+void PathTraceRenderer::updatePicture( Image* dest )
+{
+    FW_ASSERT( m_context.m_image != 0 );
+    FW_ASSERT( m_context.m_image->getSize() == dest->getSize() );
+
+#pragma omp parallel for
+    for (int i = 0; i < dest->getSize().y; ++i)
+    {
+        for (int j = 0; j < dest->getSize().x; ++j)
+        {
+            Vec4f D = m_context.m_image->getVec4f(Vec2i(j, i));
+            if (D.w != 0.0f)
+                D = D * (1.0f / D.w);
+
+            // Gamma correction.
+            Vec4f color = Vec4f(
+                FW::pow(D.x, 1.0f / 2.2f),
+                FW::pow(D.y, 1.0f / 2.2f),
+                FW::pow(D.z, 1.0f / 2.2f),
+                D.w
+            );
+
+            dest->setVec4f(Vec2i(j, i), color);
+        }
+    }
+
+//    if (m_JBF) {
+//        int kernel = m_kernel;
+//        constexpr float inv_sigmaPlane = 1.f / (2.f * 0.1f * 0.1f);
+//        constexpr float inv_sigmaColor = 1.f / (2.f * 0.6f * 0.6f);
+//        constexpr float inv_sigmaNormal = 1.f / (2.f * 0.1f * 0.1f);
+//        constexpr float inv_sigmaCoord = 1.f / (2.f * 32.0f * 32.0f);
+//
+//#pragma omp parallel for
+//        for (int i = 0; i < dest->getSize().y; ++i)
+//        {
+//            for (int j = 0; j < dest->getSize().x; ++j)
+//            {
+//                int x_start = max(0, j - kernel);
+//                int x_end = min(dest->getSize().x - 1, j + kernel);
+//                int y_start = max(0, i - kernel);
+//                int y_end = min(dest->getSize().y - 1, i + kernel);
+//
+//                Vec4f cc = m_context.m_image->getVec4f(Vec2i(j, i));
+//                Vec3f nn = m_context.m_normal->getVec4f(Vec2i(j, i)).getXYZ();
+//                Vec3f pos = m_context.m_position->getVec4f(Vec2i(j, i)).getXYZ();
+//                Vec4f D(0);
+//                float D_weight = 0;
+//
+//                for (int x = x_start; x <= x_end; x++) {
+//                    for (int y = y_start; y <= y_end; y++) {
+//                        Vec4f tmp_cc = m_context.m_image->getVec4f(Vec2i(x, y));
+//                        Vec3f tmp_nn = m_context.m_normal->getVec4f(Vec2i(x, y)).getXYZ();
+//                        Vec3f tmp_pos = m_context.m_position->getVec4f(Vec2i(x, y)).getXYZ();
+//                        float dis_pos = (Vec2i(j, i) - Vec2i(x, y)).lenSqr() * inv_sigmaCoord;
+//                        float dis_color = (cc - tmp_cc).lenSqr() * inv_sigmaColor;
+//                        float dis_n = acos(min(max(dot(nn, tmp_nn), 0.f), 1.f));
+//                        dis_n = dis_n * dis_n * inv_sigmaNormal;
+//
+//                        float D_plane = D_plane = dot(nn, (tmp_pos - pos).normalized());
+//                        D_plane = D_plane * D_plane * inv_sigmaPlane;
+//
+//                        float weight = exp(-D_plane - dis_pos - dis_color - dis_n);
+//                        D_weight += weight;
+//                        D += tmp_cc * weight;
+//                    }
+//                }
+//
+//                D = D.lenSqr() == 0 ? m_context.m_image->getVec4f(Vec2i(j, i)) : D / D_weight;
+//
+//                if (D.w != 0.0f)
+//                    D = D * (1.0f / D.w);
+//
+//                // Gamma correction.
+//                Vec4f color = Vec4f(
+//                    FW::pow(D.x, 1.0f / 2.2f),
+//                    FW::pow(D.y, 1.0f / 2.2f),
+//                    FW::pow(D.z, 1.0f / 2.2f),
+//                    D.w
+//                );
+//
+//                dest->setVec4f(Vec2i(j, i), color);
+//            }
+//        }
+//    }
+//    else
+//    {
+//#pragma omp parallel for
+//        for (int i = 0; i < dest->getSize().y; ++i)
+//        {
+//            for (int j = 0; j < dest->getSize().x; ++j)
+//            {
+//                Vec4f D = m_context.m_image->getVec4f(Vec2i(j, i));
+//                if (D.w != 0.0f)
+//                    D = D * (1.0f / D.w);
+//
+//                // Gamma correction.
+//                Vec4f color = Vec4f(
+//                    FW::pow(D.x, 1.0f / 2.2f),
+//                    FW::pow(D.y, 1.0f / 2.2f),
+//                    FW::pow(D.z, 1.0f / 2.2f),
+//                    D.w
+//                );
+//
+//                dest->setVec4f(Vec2i(j, i), color);
+//            }
+//        }
+//    }
+}
+
+void PathTraceRenderer::denoise(Image* dest)
+{
+    if (m_JBF) {
+        int kernel = m_kernel;
+        constexpr float inv_sigmaPlane = 1.f / (2.f * 0.1f * 0.1f);
+        constexpr float inv_sigmaColor = 1.f / (2.f * 0.6f * 0.6f);
+        constexpr float inv_sigmaNormal = 1.f / (2.f * 0.1f * 0.1f);
+        constexpr float inv_sigmaCoord = 1.f / (2.f * 32.0f * 32.0f);
+    
+#pragma omp parallel for
+        for (int i = 0; i < dest->getSize().y; ++i)
+        {
+            for (int j = 0; j < dest->getSize().x; ++j)
+            {
+                int x_start = max(0, j - kernel);
+                int x_end = min(dest->getSize().x - 1, j + kernel);
+                int y_start = max(0, i - kernel);
+                int y_end = min(dest->getSize().y - 1, i + kernel);
+    
+                Vec4f cc = m_context.m_image->getVec4f(Vec2i(j, i));
+                Vec3f nn = m_context.m_normal->getVec4f(Vec2i(j, i)).getXYZ();
+                Vec3f pos = m_context.m_position->getVec4f(Vec2i(j, i)).getXYZ();
+                Vec4f D(0);
+                float D_weight = 0;
+    
+                for (int x = x_start; x <= x_end; x++) {
+                    for (int y = y_start; y <= y_end; y++) {
+                        Vec4f tmp_cc = m_context.m_image->getVec4f(Vec2i(x, y));
+                        Vec3f tmp_nn = m_context.m_normal->getVec4f(Vec2i(x, y)).getXYZ();
+                        Vec3f tmp_pos = m_context.m_position->getVec4f(Vec2i(x, y)).getXYZ();
+                        float dis_pos = (Vec2i(j, i) - Vec2i(x, y)).lenSqr() * inv_sigmaCoord;
+                        float dis_color = (cc - tmp_cc).lenSqr() * inv_sigmaColor;
+                        float dis_n = acos(min(max(dot(nn, tmp_nn), 0.f), 1.f));
+                        dis_n = dis_n * dis_n * inv_sigmaNormal;
+    
+                        float D_plane = D_plane = dot(nn, (tmp_pos - pos).normalized());
+                        D_plane = D_plane * D_plane * inv_sigmaPlane;
+    
+                        float weight = exp(-D_plane - dis_pos - dis_color - dis_n);
+                        D_weight += weight;
+                        D += tmp_cc * weight;
+                    }
+                }
+    
+                D = D.lenSqr() == 0 ? m_context.m_image->getVec4f(Vec2i(j, i)) : D / D_weight;
+    
+                if (D.w != 0.0f)
+                    D = D * (1.0f / D.w);
+    
+                // Gamma correction.
+                Vec4f color = Vec4f(
+                    FW::pow(D.x, 1.0f / 2.2f),
+                    FW::pow(D.y, 1.0f / 2.2f),
+                    FW::pow(D.z, 1.0f / 2.2f),
+                    D.w
+                );
+    
                 dest->setVec4f(Vec2i(j, i), color);
             }
         }

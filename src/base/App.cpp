@@ -49,8 +49,8 @@ App::App(std::vector<std::string>& cmd_args)
 	m_cameraCtrl.setKeepAligned(true);
 
 	m_JBF = false;
-	m_kernel = 8;
-	m_spp = 8;
+	m_kernel = 6;
+	m_spp = 4;
 	m_commonCtrl.addToggle(&m_JBF, FW_KEY_NONE, "Enable Joint Bilateral Filtering(slow)");
 	m_commonCtrl.beginSliderStack();
 	m_commonCtrl.addSlider(&m_kernel, 1, 64, false, FW_KEY_NONE, FW_KEY_NONE, "Kernel Size of Joint Bilateral Filtering= %d", 0, &clear_on_next_frame);
@@ -125,6 +125,12 @@ App::App(std::vector<std::string>& cmd_args)
 
 	m_commonCtrl.loadState(m_commonCtrl.getStateFileName(1));
 	m_timer.start();
+
+
+	m_context = zmq::context_t(1);
+	m_socket = zmq::socket_t(m_context, zmq::socket_type::sub);
+	m_socket.connect("tcp://localhost:5557");
+	m_socket.set(zmq::sockopt::subscribe, "");
 }
 
 // returns the index of the needle in the haystack or -1 if not found
@@ -567,6 +573,23 @@ void App::renderFrame(GLContext* gl)
 
 			// restart cycle
 			m_updateClock.start();
+		}
+		else if (m_pathtrace_renderer->m_notDenoised)
+		{
+			m_pathtrace_renderer->m_notDenoised = false;
+			m_pathtrace_renderer->denoise(&m_img);
+		}
+		else 
+		{
+			zmq::message_t message;
+			bool received = m_socket.recv(message, zmq::recv_flags::dontwait).has_value();
+
+			if (received) {
+				std::cout << "Received frame" << std::endl;
+				m_pathtrace_renderer->pixelColor.resize(m_img.getSize().y * m_img.getSize().x);
+				memcpy(m_pathtrace_renderer->pixelColor.data(), message.data(), message.size());
+				m_pathtrace_renderer->blendFrame(&m_img);
+			}
 		}
 
 		gl->drawImage(m_img, Vec2f(0));
