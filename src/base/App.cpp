@@ -126,7 +126,6 @@ App::App(std::vector<std::string>& cmd_args)
 	m_commonCtrl.loadState(m_commonCtrl.getStateFileName(1));
 	m_timer.start();
 
-
 	m_context = zmq::context_t(1);
 	m_socket = zmq::socket_t(m_context, zmq::socket_type::sub);
 	m_socket.connect("tcp://localhost:5557");

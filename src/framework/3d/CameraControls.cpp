@@ -28,6 +28,8 @@
 #include "3d/CameraControls.hpp"
 #include "3d/Mesh.hpp"
 #include "io/StateDump.hpp"
+#include <cstring>
+#include <iostream>
 
 using namespace FW;
 
@@ -55,6 +57,11 @@ CameraControls::CameraControls(CommonControls* commonControls, U32 features)
     initDefaults();
     if ((m_features & Feature_StereoControls) != 0 && !GLContext::isStereoAvailable())
         m_features &= ~Feature_StereoControls;
+
+    // set up input publish socket
+    m_inputPubContext = zmq::context_t(1);
+    m_inputPubSocket = zmq::socket_t(m_inputPubContext, zmq::socket_type::pub);
+    m_inputPubSocket.bind("tcp://*:5555");
 }
 
 //------------------------------------------------------------------------
@@ -77,6 +84,8 @@ bool CameraControls::handleEvent(const Window::Event& ev)
     Mat3f orient = getOrientation();
     Vec3f rotate = 0.0f;
     Vec3f move   = 0.0f;
+
+    bool hasMovement = false;
 
     // Handle events.
 
@@ -103,25 +112,50 @@ bool CameraControls::handleEvent(const Window::Event& ev)
         return false;
 
     case Window::EventType_KeyDown:
-        if (ev.key == FW_KEY_MOUSE_LEFT)    m_dragLeft = true;
-        if (ev.key == FW_KEY_MOUSE_MIDDLE)  m_dragMiddle = true;
-        if (ev.key == FW_KEY_MOUSE_RIGHT)   m_dragRight = true;
-        if (ev.key == FW_KEY_WHEEL_UP)      m_speed *= 1.2f;
-        if (ev.key == FW_KEY_WHEEL_DOWN)    m_speed /= 1.2f;
+        if (ev.key == FW_KEY_MOUSE_LEFT) {
+            m_dragLeft = true;
+        }    
+        if (ev.key == FW_KEY_MOUSE_MIDDLE) {
+            m_dragMiddle = true;
+        }  
+        if (ev.key == FW_KEY_MOUSE_RIGHT) {
+            m_dragRight = true;
+        }   
+        if (ev.key == FW_KEY_WHEEL_UP) {
+            m_speed *= 1.2f;
+        }      
+        if (ev.key == FW_KEY_WHEEL_DOWN) {
+            m_speed /= 1.2f;
+        }   
         break;
 
     case Window::EventType_KeyUp:
-        if (ev.key == FW_KEY_MOUSE_LEFT)    m_dragLeft = false;
-        if (ev.key == FW_KEY_MOUSE_MIDDLE)  m_dragMiddle = false;
-        if (ev.key == FW_KEY_MOUSE_RIGHT)   m_dragRight = false;
+        if (ev.key == FW_KEY_MOUSE_LEFT) {
+            m_dragLeft = false;
+        }    
+        if (ev.key == FW_KEY_MOUSE_MIDDLE) {
+            m_dragMiddle = false;
+        } 
+        if (ev.key == FW_KEY_MOUSE_RIGHT) {
+            m_dragRight = false;
+        }
         break;
 
     case Window::EventType_Mouse:
         {
             Vec3f delta = Vec3f((F32)ev.mouseDelta.x, (F32)-ev.mouseDelta.y, 0.0f);
-            if (m_dragLeft)     rotate += delta * s_mouseRotateSpeed;
-            if (m_dragMiddle)   move += delta * m_speed * s_mouseStrafeSpeed;
-            if (m_dragRight)    move += Vec3f(0.0f, 0.0f, (F32)ev.mouseDelta.y) * m_speed * s_mouseStrafeSpeed;
+            if (m_dragLeft) {
+                rotate += delta * s_mouseRotateSpeed;
+                hasMovement = true;
+            }
+            if (m_dragMiddle) {
+                move += delta * m_speed * s_mouseStrafeSpeed;
+                hasMovement = true;
+            }   
+            if (m_dragRight) {
+                move += Vec3f(0.0f, 0.0f, (F32)ev.mouseDelta.y) * m_speed * s_mouseStrafeSpeed;
+                hasMovement = true;
+            }    
         }
         break;
 
@@ -132,19 +166,55 @@ bool CameraControls::handleEvent(const Window::Event& ev)
             Vec3f   rotateTmp   = 0.0f;
             bool    alt         = m_window->isKeyDown(FW_KEY_ALT);
 
-            if (m_window->isKeyDown(FW_KEY_A) || (m_window->isKeyDown(FW_KEY_LEFT) && alt))     move.x -= 1.0f;
-            if (m_window->isKeyDown(FW_KEY_D) || (m_window->isKeyDown(FW_KEY_RIGHT) && alt))    move.x += 1.0f;
-            if (m_window->isKeyDown(FW_KEY_F) || m_window->isKeyDown(FW_KEY_PAGE_DOWN))         move.y -= 1.0f;
-            if (m_window->isKeyDown(FW_KEY_R) || m_window->isKeyDown(FW_KEY_PAGE_UP))           move.y += 1.0f;
-            if (m_window->isKeyDown(FW_KEY_W) || (m_window->isKeyDown(FW_KEY_UP) && alt))       move.z -= 1.0f;
-            if (m_window->isKeyDown(FW_KEY_S) || (m_window->isKeyDown(FW_KEY_DOWN) && alt))     move.z += 1.0f;
+            if (m_window->isKeyDown(FW_KEY_A) || (m_window->isKeyDown(FW_KEY_LEFT) && alt)) {
+                move.x -= 1.0f;
+                hasMovement = true;
+            }     
+            if (m_window->isKeyDown(FW_KEY_D) || (m_window->isKeyDown(FW_KEY_RIGHT) && alt)) {
+                move.x += 1.0f;
+                hasMovement = true;
+            }    
+            if (m_window->isKeyDown(FW_KEY_F) || m_window->isKeyDown(FW_KEY_PAGE_DOWN)) {
+                move.y -= 1.0f;
+                hasMovement = true;
+            }         
+            if (m_window->isKeyDown(FW_KEY_R) || m_window->isKeyDown(FW_KEY_PAGE_UP)) {
+                move.y += 1.0f;
+                hasMovement = true;
+            }           
+            if (m_window->isKeyDown(FW_KEY_W) || (m_window->isKeyDown(FW_KEY_UP) && alt)) {
+                move.z -= 1.0f;
+                hasMovement = true;
+            }       
+            if (m_window->isKeyDown(FW_KEY_S) || (m_window->isKeyDown(FW_KEY_DOWN) && alt)) {
+                move.z += 1.0f;
+                hasMovement = true;
+            }     
 
-            if (m_window->isKeyDown(FW_KEY_LEFT) && !alt)                                       rotateTmp.x -= 1.0f;
-            if (m_window->isKeyDown(FW_KEY_RIGHT) && !alt)                                      rotateTmp.x += 1.0f;
-            if (m_window->isKeyDown(FW_KEY_DOWN) && !alt)                                       rotateTmp.y -= 1.0f;
-            if (m_window->isKeyDown(FW_KEY_UP) && !alt)                                         rotateTmp.y += 1.0f;
-            if (m_window->isKeyDown(FW_KEY_E) || m_window->isKeyDown(FW_KEY_HOME))              rotateTmp.z -= 1.0f;
-            if (m_window->isKeyDown(FW_KEY_Q) || m_window->isKeyDown(FW_KEY_INSERT))            rotateTmp.z += 1.0f;
+            if (m_window->isKeyDown(FW_KEY_LEFT) && !alt) {
+                rotateTmp.x -= 1.0f;
+                hasMovement = true;
+            }                                       
+            if (m_window->isKeyDown(FW_KEY_RIGHT) && !alt) {
+                rotateTmp.x += 1.0f;
+                hasMovement = true;
+            }                                     
+            if (m_window->isKeyDown(FW_KEY_DOWN) && !alt) {
+                rotateTmp.y -= 1.0f;
+                hasMovement = true;
+            }                                      
+            if (m_window->isKeyDown(FW_KEY_UP) && !alt) {
+                rotateTmp.y += 1.0f;
+                hasMovement = true;
+            }                                         
+            if (m_window->isKeyDown(FW_KEY_E) || m_window->isKeyDown(FW_KEY_HOME)) {
+                rotateTmp.z -= 1.0f;
+                hasMovement = true;
+            }              
+            if (m_window->isKeyDown(FW_KEY_Q) || m_window->isKeyDown(FW_KEY_INSERT)) {
+                rotateTmp.z += 1.0f;
+                hasMovement = true;
+            }            
 
             move *= timeDelta * m_speed * boost;
             rotate += rotateTmp * timeDelta * s_keyRotateSpeed * boost;
@@ -153,6 +223,15 @@ bool CameraControls::handleEvent(const Window::Event& ev)
 
     default:
         break;
+    }
+
+    if (hasMovement) {
+        // send client input
+        Vec3f movement[2] = { rotate, move };
+        zmq::message_t message(2 * sizeof(Vec3f));
+        std::memcpy(message.data(), movement, 2 * sizeof(Vec3f));
+        m_inputPubSocket.send(message, zmq::send_flags::none);
+        // std::cout << "input sent!" << std::endl;
     }
 
     // Apply movement.

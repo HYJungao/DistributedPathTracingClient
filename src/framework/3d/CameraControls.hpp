@@ -28,6 +28,7 @@
 #pragma once
 #include "gui/CommonControls.hpp"
 #include "base/Timer.hpp"
+#include <zmq.hpp>
 
 namespace FW
 {
@@ -150,6 +151,10 @@ private:
     bool                m_enableStereo;
     F32                 m_stereoSeparation;
     F32                 m_stereoConvergence;
+
+public:
+    zmq::context_t m_inputPubContext;
+    zmq::socket_t m_inputPubSocket;
 };
 
 //------------------------------------------------------------------------
