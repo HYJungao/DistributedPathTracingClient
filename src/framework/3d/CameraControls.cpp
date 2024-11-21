@@ -59,9 +59,18 @@ CameraControls::CameraControls(CommonControls* commonControls, U32 features)
         m_features &= ~Feature_StereoControls;
 
     // set up input publish socket
-    m_inputPubContext = zmq::context_t(1);
-    m_inputPubSocket = zmq::socket_t(m_inputPubContext, zmq::socket_type::pub);
+    m_context = zmq::context_t(1);
+    m_inputPubSocket = zmq::socket_t(m_context, zmq::socket_type::pub);
     m_inputPubSocket.bind("tcp://*:5555");
+
+    m_router = zmq::socket_t(m_routerContext, zmq::socket_type::router);
+    m_router.bind("tcp://*:5556");
+
+    // monitor connection/disconnection to input socket
+    //monitorSocket = zmq::socket_t(m_inputPubContext, zmq::socket_type::pair);
+    //assert(zmq_socket_monitor(m_inputPubSocket.handle(), "inproc://monitor", ZMQ_EVENT_ALL) == 0);
+    //zmq::socket_t monitor_socket(m_inputPubContext, zmq::socket_type::pair);
+    //monitor_socket.connect("inproc://monitor");
 }
 
 //------------------------------------------------------------------------
@@ -225,6 +234,27 @@ bool CameraControls::handleEvent(const Window::Event& ev)
         break;
     }
 
+
+    // monitor server connection or disconnction
+    //bool received = monitorSocket.recv(socketEvent, zmq::recv_flags::dontwait).has_value();
+    //if (received) {
+    //    std::cout << "shit";
+    //    memcpy(&event, socketEvent.data(), socketEvent.size());
+    //    switch (event.event) {
+    //    case ZMQ_EVENT_CONNECTED:
+    //        std::cout << "CONNECTED";
+    //        break;
+    //    case ZMQ_EVENT_CONNECT_DELAYED:
+    //        std::cout << "CONNECT DELAYED";
+    //        break;
+    //    case ZMQ_EVENT_DISCONNECTED:
+    //        std::cout << "DISCONNECTED";
+    //        break;
+    //    default:
+    //        std::cout << "OTHER (" << event.event << ")";
+    //    }
+    //}
+
     if (hasMovement) {
         // send client input
         Vec3f movement[2] = { rotate, move };
@@ -267,6 +297,26 @@ bool CameraControls::handleEvent(const Window::Event& ev)
     if (m_alignZ)
         m_up = Vec3f(0.0f, 0.0f, 1.0f);
     m_alignZ = false;
+
+    // send client state to initialize server or
+    // re-schedule load when some servers disconnect
+    zmq::message_t identity;
+    bool received = m_router.recv(identity, zmq::recv_flags::dontwait).has_value();
+    if (received) {
+        std::string clientID(static_cast<char*>(identity.data()), identity.size());
+
+        zmq::message_t request;
+        m_router.recv(request, zmq::recv_flags::dontwait);
+        std::string requestData(static_cast<char*>(request.data()), request.size());
+        std::cout << "Received from " << clientID << ": " << requestData << std::endl;
+
+        // send current client state
+        Vec3f cameraParams[3] = { m_position, m_forward, m_up };
+        zmq::message_t message(3 * sizeof(Vec3f));
+        std::memcpy(message.data(), cameraParams, 3 * sizeof(Vec3f));
+        m_router.send(identity, zmq::send_flags::sndmore);
+        m_router.send(message, zmq::send_flags::none);
+    }
 
     // Update stereo mode.
 

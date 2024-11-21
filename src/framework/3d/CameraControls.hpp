@@ -29,6 +29,7 @@
 #include "gui/CommonControls.hpp"
 #include "base/Timer.hpp"
 #include <zmq.hpp>
+#include <zmq_addon.hpp>
 
 namespace FW
 {
@@ -153,8 +154,14 @@ private:
     F32                 m_stereoConvergence;
 
 public:
-    zmq::context_t m_inputPubContext;
+    zmq::context_t m_context;
     zmq::socket_t m_inputPubSocket;
+
+    zmq::context_t m_routerContext;
+    zmq::socket_t m_router;
+    //zmq::socket_t monitorSocket;
+    //zmq_event_t event;
+    //zmq::message_t socketEvent;    
 };
 
 //------------------------------------------------------------------------
