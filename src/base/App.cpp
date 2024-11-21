@@ -26,6 +26,16 @@ using namespace FW;
 
 //------------------------------------------------------------------------
 
+struct control {
+	bool m_RTMode;
+	bool m_JBF;
+	bool m_normalMapped;
+	bool m_useRussianRoulette;
+	int m_kernel;
+	int m_spp_server;
+	int m_numBounces;
+};
+
 bool fileExists(std::string fileName)
 {
 	return std::ifstream(fileName).good();
@@ -49,42 +59,47 @@ App::App(std::vector<std::string>& cmd_args)
 	m_cameraCtrl.setKeepAligned(true);
 
 	m_JBF = false;
+	m_JBF_server = false;
 	m_kernel = 6;
 	m_spp = 4;
+	m_spp_server = 4;
 	m_commonCtrl.addToggle(&m_JBF, FW_KEY_NONE, "Enable Joint Bilateral Filtering(slow)");
+	m_commonCtrl.addToggle(&m_JBF_server, FW_KEY_NONE, "Enable Joint Bilateral Filtering(slow) on server");
 	m_commonCtrl.beginSliderStack();
 	m_commonCtrl.addSlider(&m_kernel, 1, 64, false, FW_KEY_NONE, FW_KEY_NONE, "Kernel Size of Joint Bilateral Filtering= %d", 0, &clear_on_next_frame);
 	m_commonCtrl.addSlider(&m_spp, 1, 512, false, FW_KEY_NONE, FW_KEY_NONE, "Sample Per Pixel= %d", 0, &clear_on_next_frame);
+	m_commonCtrl.addSlider(&m_spp_server, 1, 512, false, FW_KEY_NONE, FW_KEY_NONE, "Sample Per Pixel of Server= %d", 0, &clear_on_next_frame);
+	m_commonCtrl.addSlider(&m_numBounces, 0, 8, false, FW_KEY_NONE, FW_KEY_NONE, "Number of indirect bounces= %d", 0, &clear_on_next_frame);
 	m_commonCtrl.endSliderStack();
 
-	m_commonCtrl.addButton((S32*)&m_action, Action_LoadMesh, FW_KEY_M, "Load mesh or state... (M)");
-	m_commonCtrl.addButton((S32*)&m_action, Action_ReloadMesh, FW_KEY_F5, "Reload mesh (F5)");
-	m_commonCtrl.addButton((S32*)&m_action, Action_SaveMesh, FW_KEY_O, "Save mesh... (O)");
-	m_commonCtrl.addButton((S32*)&m_action, Action_LoadBVH, FW_KEY_NONE, "Load BVH from file...");
-	m_commonCtrl.addSeparator();
+	//m_commonCtrl.addButton((S32*)&m_action, Action_LoadMesh, FW_KEY_M, "Load mesh or state... (M)");
+	//m_commonCtrl.addButton((S32*)&m_action, Action_ReloadMesh, FW_KEY_F5, "Reload mesh (F5)");
+	//m_commonCtrl.addButton((S32*)&m_action, Action_SaveMesh, FW_KEY_O, "Save mesh... (O)");
+	//m_commonCtrl.addButton((S32*)&m_action, Action_LoadBVH, FW_KEY_NONE, "Load BVH from file...");
+	//m_commonCtrl.addSeparator();
 
-	m_commonCtrl.addButton((S32*)&m_action, Action_ResetCamera, FW_KEY_NONE, "Reset camera");
-	m_commonCtrl.addButton((S32*)&m_action, Action_EncodeCameraSignature, FW_KEY_NONE, "Encode camera signature");
-	m_commonCtrl.addButton((S32*)&m_action, Action_DecodeCameraSignature, FW_KEY_NONE, "Decode camera signature...");
+	//m_commonCtrl.addButton((S32*)&m_action, Action_ResetCamera, FW_KEY_NONE, "Reset camera");
+	//m_commonCtrl.addButton((S32*)&m_action, Action_EncodeCameraSignature, FW_KEY_NONE, "Encode camera signature");
+	//m_commonCtrl.addButton((S32*)&m_action, Action_DecodeCameraSignature, FW_KEY_NONE, "Decode camera signature...");
 	m_window.addListener(&m_cameraCtrl);
-	m_commonCtrl.addSeparator();
+	//m_commonCtrl.addSeparator();
 
-	m_commonCtrl.addButton((S32*)&m_action, Action_NormalizeScale, FW_KEY_NONE, "Normalize scale");
+	//m_commonCtrl.addButton((S32*)&m_action, Action_NormalizeScale, FW_KEY_NONE, "Normalize scale");
 	//    m_commonCtrl.addButton((S32*)&m_action, Action_FlipXY,                  FW_KEY_NONE,    "Flip X/Y");
 	//    m_commonCtrl.addButton((S32*)&m_action, Action_FlipYZ,                  FW_KEY_NONE,    "Flip Y/Z");
 	//    m_commonCtrl.addButton((S32*)&m_action, Action_FlipZ,                   FW_KEY_NONE,    "Flip Z");
-	m_commonCtrl.addSeparator();
+	//m_commonCtrl.addSeparator();
 
-	m_commonCtrl.addButton((S32*)&m_action, Action_NormalizeNormals, FW_KEY_NONE, "Normalize normals");
-	m_commonCtrl.addButton((S32*)&m_action, Action_FlipNormals, FW_KEY_NONE, "Flip normals");
-	m_commonCtrl.addButton((S32*)&m_action, Action_RecomputeNormals, FW_KEY_NONE, "Recompute normals");
-	m_commonCtrl.addSeparator();
+	//m_commonCtrl.addButton((S32*)&m_action, Action_NormalizeNormals, FW_KEY_NONE, "Normalize normals");
+	//m_commonCtrl.addButton((S32*)&m_action, Action_FlipNormals, FW_KEY_NONE, "Flip normals");
+	//m_commonCtrl.addButton((S32*)&m_action, Action_RecomputeNormals, FW_KEY_NONE, "Recompute normals");
+	//m_commonCtrl.addSeparator();
 
-	m_commonCtrl.addToggle((S32*)&m_cullMode, CullMode_None, FW_KEY_NONE, "Disable backface culling");
-	m_commonCtrl.addToggle((S32*)&m_cullMode, CullMode_CW, FW_KEY_NONE, "Cull clockwise faces");
-	m_commonCtrl.addToggle((S32*)&m_cullMode, CullMode_CCW, FW_KEY_NONE, "Cull counter-clockwise faces");
-	m_commonCtrl.addButton((S32*)&m_action, Action_FlipTriangles, FW_KEY_NONE, "Flip triangles");
-	m_commonCtrl.addSeparator();
+	//m_commonCtrl.addToggle((S32*)&m_cullMode, CullMode_None, FW_KEY_NONE, "Disable backface culling");
+	//m_commonCtrl.addToggle((S32*)&m_cullMode, CullMode_CW, FW_KEY_NONE, "Cull clockwise faces");
+	//m_commonCtrl.addToggle((S32*)&m_cullMode, CullMode_CCW, FW_KEY_NONE, "Cull counter-clockwise faces");
+	//m_commonCtrl.addButton((S32*)&m_action, Action_FlipTriangles, FW_KEY_NONE, "Flip triangles");
+	//m_commonCtrl.addSeparator();
 
 	//    m_commonCtrl.addButton((S32*)&m_action, Action_CleanMesh,               FW_KEY_NONE,    "Remove unused materials, denegerate triangles, and unreferenced vertices");
 	//    m_commonCtrl.addButton((S32*)&m_action, Action_CollapseVertices,        FW_KEY_NONE,    "Collapse duplicate vertices");
@@ -96,18 +111,18 @@ App::App(std::vector<std::string>& cmd_args)
 
 	m_commonCtrl.addButton((S32*)&m_action, Action_PathTraceMode, FW_KEY_ENTER, "Path trace mode (ENTER)");
 	m_commonCtrl.addButton((S32*)&m_action, Action_PlaceLightSourceAtCamera, FW_KEY_SPACE, "Place light at camera (SPACE)", &clear_on_next_frame);
-	m_commonCtrl.addButton(&m_clearVisualization, FW_KEY_BACKSPACE, "Clear visualization (BACKSPACE)");
+	//m_commonCtrl.addButton(&m_clearVisualization, FW_KEY_BACKSPACE, "Clear visualization (BACKSPACE)");
 	m_commonCtrl.addToggle(&m_useRussianRoulette, FW_KEY_NONE, "Use Russian Roulette", &clear_on_next_frame);
 	m_commonCtrl.addToggle(&m_normalMapped, FW_KEY_NONE, "Use normal mapping", &clear_on_next_frame);
-	m_commonCtrl.addToggle(&m_playbackVisualization, FW_KEY_NONE, "Visualization playback");
-	m_commonCtrl.beginSliderStack();
-	m_commonCtrl.addSlider(&m_numBounces, 0, 8, false, FW_KEY_NONE, FW_KEY_NONE, "Number of indirect bounces= %d", 0, &clear_on_next_frame);
-	m_commonCtrl.addSlider(&m_lightSize, 0.01f, 200.0f, false, FW_KEY_NONE, FW_KEY_NONE, "Light source area= %f", 0, &clear_on_next_frame);
-	m_commonCtrl.endSliderStack();
-	m_commonCtrl.beginSliderStack();
-	m_commonCtrl.addSlider(&m_numDebugPathCount, 1, 1000, false, FW_KEY_NONE, FW_KEY_NONE, "Number of debug paths to fire= %d");
-	m_commonCtrl.addSlider(&m_visualizationAlpha, 0.01f, 1.0f, false, FW_KEY_NONE, FW_KEY_NONE, "Debug ray visualization alpha= %f");
-	m_commonCtrl.endSliderStack();
+	//m_commonCtrl.addToggle(&m_playbackVisualization, FW_KEY_NONE, "Visualization playback");
+	//m_commonCtrl.beginSliderStack();
+	//m_commonCtrl.addSlider(&m_numBounces, 0, 8, false, FW_KEY_NONE, FW_KEY_NONE, "Number of indirect bounces= %d", 0, &clear_on_next_frame);
+	//m_commonCtrl.addSlider(&m_lightSize, 0.01f, 200.0f, false, FW_KEY_NONE, FW_KEY_NONE, "Light source area= %f", 0, &clear_on_next_frame);
+	//m_commonCtrl.endSliderStack();
+	//m_commonCtrl.beginSliderStack();
+	//m_commonCtrl.addSlider(&m_numDebugPathCount, 1, 1000, false, FW_KEY_NONE, FW_KEY_NONE, "Number of debug paths to fire= %d");
+	//m_commonCtrl.addSlider(&m_visualizationAlpha, 0.01f, 1.0f, false, FW_KEY_NONE, FW_KEY_NONE, "Debug ray visualization alpha= %f");
+	//m_commonCtrl.endSliderStack();
 
 	m_window.addListener(this);
 	m_window.addListener(&m_commonCtrl);
@@ -435,6 +450,8 @@ bool App::handleEvent(const Window::Event& ev)
 		m_RTMode = !m_RTMode;
 		if (m_RTMode)
 		{
+			control ctl = { m_RTMode, m_JBF_server, m_normalMapped, m_useRussianRoulette, m_kernel, m_spp_server, m_numBounces };
+			m_cameraCtrl.sendControl(&ctl, sizeof(control));
 			m_pathtrace_renderer->stop();
 			if (m_img.getSize() != m_window.getSize())
 			{
@@ -450,6 +467,7 @@ bool App::handleEvent(const Window::Event& ev)
 		}
 		else
 		{
+			m_cameraCtrl.sendControl(&m_RTMode, sizeof(bool));
 			m_pathtrace_renderer->stop();
 		}
 		break;

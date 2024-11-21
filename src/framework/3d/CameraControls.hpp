@@ -161,7 +161,10 @@ public:
     zmq::socket_t m_router;
     //zmq::socket_t monitorSocket;
     //zmq_event_t event;
-    //zmq::message_t socketEvent;    
+    //zmq::message_t socketEvent;
+
+public:
+    void sendControl(const void* src, size_t size);
 };
 
 //------------------------------------------------------------------------

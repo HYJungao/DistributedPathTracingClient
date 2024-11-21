@@ -167,8 +167,10 @@ private:
 	std::vector<PathVisualizationNode> m_visualization;
 
     bool                                m_JBF;
+    bool                                m_JBF_server;
     int                                 m_kernel;
     int                                 m_spp;
+    int                                 m_spp_server;
 
 public:
     zmq::context_t m_context;

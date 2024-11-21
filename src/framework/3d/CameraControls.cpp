@@ -334,6 +334,13 @@ bool CameraControls::handleEvent(const Window::Event& ev)
     return false;
 }
 
+void CameraControls::sendControl(const void* src, size_t size) 
+{
+    zmq::message_t message(size);
+    std::memcpy(message.data(), src, size);
+    m_inputPubSocket.send(message, zmq::send_flags::none);
+}
+
 //------------------------------------------------------------------------
 
 void CameraControls::readState(StateDump& d)
@@ -528,32 +535,32 @@ void CameraControls::addGUIControls(void)
 {
     CommonControls& cc = *m_commonControls;
 
-    if (hasFeature(Feature_AlignYButton))
-        cc.addButton(&m_alignY, FW_KEY_NONE, "Align camera to Y-axis");
-    if (hasFeature(Feature_AlignZButton))
-        cc.addButton(&m_alignZ, FW_KEY_NONE, "Align camera to Z-axis");
-    if (hasFeature(Feature_KeepAlignToggle))
-        cc.addToggle(&m_keepAligned, FW_KEY_NONE, "Retain camera alignment");
-    if (hasFeature(Feature_SpeedSlider))
-        cc.addSlider(&m_speed, 1.0e-3f, 1.0e4f, true, FW_KEY_PLUS, FW_KEY_MINUS, "Camera speed (+/-, mouse wheel) = %g units/sec", 0.05f);
+    //if (hasFeature(Feature_AlignYButton))
+    //    cc.addButton(&m_alignY, FW_KEY_NONE, "Align camera to Y-axis");
+    //if (hasFeature(Feature_AlignZButton))
+    //    cc.addButton(&m_alignZ, FW_KEY_NONE, "Align camera to Z-axis");
+    //if (hasFeature(Feature_KeepAlignToggle))
+    //    cc.addToggle(&m_keepAligned, FW_KEY_NONE, "Retain camera alignment");
+    //if (hasFeature(Feature_SpeedSlider))
+    //    cc.addSlider(&m_speed, 1.0e-3f, 1.0e4f, true, FW_KEY_PLUS, FW_KEY_MINUS, "Camera speed (+/-, mouse wheel) = %g units/sec", 0.05f);
 
     cc.beginSliderStack();
     if (hasFeature(Feature_FOVSlider))
         cc.addSlider(&m_fov, 1.0f, 179.0f, false, FW_KEY_NONE, FW_KEY_NONE, "Camera FOV = %.1f degrees", 0.2f);
-    if (hasFeature(Feature_NearSlider))
-        cc.addSlider(&m_near, 1.0e-3f, 1.0e2f, true, FW_KEY_NONE, FW_KEY_NONE, "Camera near = %g units", 0.05f);
-    if (hasFeature(Feature_FarSlider))
-        cc.addSlider(&m_far, 1.0e-1f, 1.0e5f, true, FW_KEY_NONE, FW_KEY_NONE, "Camera far = %g units", 0.05f);
+    //if (hasFeature(Feature_NearSlider))
+    //    cc.addSlider(&m_near, 1.0e-3f, 1.0e2f, true, FW_KEY_NONE, FW_KEY_NONE, "Camera near = %g units", 0.05f);
+    //if (hasFeature(Feature_FarSlider))
+    //    cc.addSlider(&m_far, 1.0e-1f, 1.0e5f, true, FW_KEY_NONE, FW_KEY_NONE, "Camera far = %g units", 0.05f);
     cc.endSliderStack();
 
-    if (hasFeature(Feature_StereoControls))
-    {
-        cc.addToggle(&m_enableStereo, FW_KEY_NONE, "Enable stereoscopic 3D");
-        cc.beginSliderStack();
-        cc.addSlider(&m_stereoSeparation, 1.0e-3f, 1.0e3f, true, FW_KEY_NONE, FW_KEY_NONE, "Stereo separation = %g units");
-        cc.addSlider(&m_stereoConvergence, 1.0e-4f, 1.0f, true, FW_KEY_NONE, FW_KEY_NONE, "Stereo convergence = %g units");
-        cc.endSliderStack();
-    }
+    //if (hasFeature(Feature_StereoControls))
+    //{
+    //    cc.addToggle(&m_enableStereo, FW_KEY_NONE, "Enable stereoscopic 3D");
+    //    cc.beginSliderStack();
+    //    cc.addSlider(&m_stereoSeparation, 1.0e-3f, 1.0e3f, true, FW_KEY_NONE, FW_KEY_NONE, "Stereo separation = %g units");
+    //    cc.addSlider(&m_stereoConvergence, 1.0e-4f, 1.0f, true, FW_KEY_NONE, FW_KEY_NONE, "Stereo convergence = %g units");
+    //    cc.endSliderStack();
+    //}
 }
 
 //------------------------------------------------------------------------
