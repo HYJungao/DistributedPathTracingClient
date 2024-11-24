@@ -36,6 +36,11 @@ struct control {
 	int m_numBounces;
 };
 
+struct LightControl {
+	Vec3f position;
+	Mat3f orientation;
+};
+
 bool fileExists(std::string fileName)
 {
 	return std::ifstream(fileName).good();
@@ -439,13 +444,16 @@ bool App::handleEvent(const Window::Event& ev)
 			chopBehindPlane(m_mesh.get(), pleq);
 		}
 		break;
-	case Action_PlaceLightSourceAtCamera:
+	case Action_PlaceLightSourceAtCamera: {
 		m_areaLight->setOrientation(m_cameraCtrl.getCameraToWorld().getXYZ());
 		m_areaLight->setPosition(m_cameraCtrl.getPosition());
 		m_cameraCtrl.initState.m_lightOrientation = m_areaLight->getOrientation();
 		m_cameraCtrl.initState.m_lightPosition = m_areaLight->getPosition();
+		LightControl temp = { m_areaLight->getPosition(),m_areaLight->getOrientation() };
+		m_cameraCtrl.sendControl(&temp, sizeof(LightControl));
 		m_commonCtrl.message("Placed light at camera");
 		break;
+	}
 
 	case Action_PathTraceMode:
 		m_RTMode = !m_RTMode;
