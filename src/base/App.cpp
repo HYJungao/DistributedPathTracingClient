@@ -59,6 +59,9 @@ App::App(std::vector<std::string>& cmd_args)
 	m_img(Vec2i(10, 10), ImageFormat::RGBA_Vec4f) // will get resized immediately
 {
 
+	m_router = zmq::socket_t(m_routerContext, zmq::socket_type::router);
+	m_router.bind("tcp://*:5556");
+
 	m_commonCtrl.showFPS(true);
 	m_commonCtrl.addStateObject(this);
 	m_cameraCtrl.setKeepAligned(true);
@@ -141,15 +144,14 @@ App::App(std::vector<std::string>& cmd_args)
 
 	process_args(cmd_args);
 
-
-
 	m_commonCtrl.loadState(m_commonCtrl.getStateFileName(1));
-	m_timer.start();
 
 	m_context = zmq::context_t(1);
 	m_socket = zmq::socket_t(m_context, zmq::socket_type::sub);
 	m_socket.connect("tcp://localhost:5557");
 	m_socket.set(zmq::sockopt::subscribe, "");
+
+	m_timer.start();
 }
 
 // returns the index of the needle in the haystack or -1 if not found
@@ -447,8 +449,8 @@ bool App::handleEvent(const Window::Event& ev)
 	case Action_PlaceLightSourceAtCamera: {
 		m_areaLight->setOrientation(m_cameraCtrl.getCameraToWorld().getXYZ());
 		m_areaLight->setPosition(m_cameraCtrl.getPosition());
-		m_cameraCtrl.initState.m_lightOrientation = m_areaLight->getOrientation();
-		m_cameraCtrl.initState.m_lightPosition = m_areaLight->getPosition();
+		initState.m_lightOrientation = m_areaLight->getOrientation();
+		initState.m_lightPosition = m_areaLight->getPosition();
 		LightControl temp = { m_areaLight->getPosition(),m_areaLight->getOrientation() };
 		m_cameraCtrl.sendControl(&temp, sizeof(LightControl));
 		m_commonCtrl.message("Placed light at camera");
@@ -461,13 +463,13 @@ bool App::handleEvent(const Window::Event& ev)
 		{
 			control ctl = { m_RTMode, m_JBF_server, m_normalMapped, m_useRussianRoulette, m_kernel, m_spp_server, m_numBounces };
 			m_cameraCtrl.sendControl(&ctl, sizeof(control));
-			m_cameraCtrl.initState.m_RTMode = m_RTMode;
-			m_cameraCtrl.initState.m_JBF_server = m_JBF_server;
-			m_cameraCtrl.initState.m_normalMapped = m_normalMapped;
-			m_cameraCtrl.initState.m_useRussianRoulette = m_useRussianRoulette;
-			m_cameraCtrl.initState.m_kernel = m_kernel;
-			m_cameraCtrl.initState.m_spp_server = m_spp_server;
-			m_cameraCtrl.initState.m_numBounces = m_numBounces;
+			initState.m_RTMode = m_RTMode;
+			initState.m_JBF_server = m_JBF_server;
+			initState.m_normalMapped = m_normalMapped;
+			initState.m_useRussianRoulette = m_useRussianRoulette;
+			initState.m_kernel = m_kernel;
+			initState.m_spp_server = m_spp_server;
+			initState.m_numBounces = m_numBounces;
 			m_pathtrace_renderer->stop();
 			if (m_img.getSize() != m_window.getSize())
 			{
@@ -483,7 +485,7 @@ bool App::handleEvent(const Window::Event& ev)
 		}
 		else
 		{
-			m_cameraCtrl.initState.m_RTMode = m_RTMode;
+			initState.m_RTMode = m_RTMode;
 			m_cameraCtrl.sendControl(&m_RTMode, sizeof(bool));
 			m_pathtrace_renderer->stop();
 		}
@@ -514,6 +516,28 @@ bool App::handleEvent(const Window::Event& ev)
 	}
 
 
+	// send client state to initialize server or
+	// re-schedule load when some servers disconnect
+	zmq::message_t identity;
+	bool received = m_router.recv(identity, zmq::recv_flags::dontwait).has_value();
+	if (received) {
+		std::string clientID(static_cast<char*>(identity.data()), identity.size());
+
+		zmq::message_t request;
+		m_router.recv(request, zmq::recv_flags::dontwait);
+		std::string requestData(static_cast<char*>(request.data()), request.size());
+		std::cout << "Received from " << clientID << ": " << requestData << std::endl;
+
+		// send current client state
+		initState.m_position = m_cameraCtrl.getPosition();
+		initState.m_forward = m_cameraCtrl.getForward();
+		initState.m_up = m_cameraCtrl.getUp();
+		zmq::message_t message(sizeof(InitialState) + m_scene.getLength() + 1);
+		std::memcpy(message.data(), &initState, sizeof(InitialState));
+		std::memcpy(static_cast<char*>(message.data()) + sizeof(InitialState), m_scene.getPtr(), m_scene.getLength() + 1);
+		m_router.send(identity, zmq::send_flags::sndmore);
+		m_router.send(message, zmq::send_flags::none);
+	}
 
 	m_window.setVisible(true);
 
@@ -541,9 +565,9 @@ void App::readState(StateDump& d)
 
 	if (m_meshFileName != meshFileName && meshFileName.getLength()) {
 		m_cameraCtrl.sendControl(m_commonCtrl.m_currentScene.getPtr(), m_commonCtrl.m_currentScene.getLength() + 1);
-		m_cameraCtrl.m_scene = m_commonCtrl.m_currentScene;
-		m_cameraCtrl.initState.m_lightPosition = m_areaLight->getPosition();
-		m_cameraCtrl.initState.m_lightOrientation = m_areaLight->getOrientation();
+		m_scene = m_commonCtrl.m_currentScene;
+		initState.m_lightPosition = m_areaLight->getPosition();
+		initState.m_lightOrientation = m_areaLight->getOrientation();
 		loadMesh(meshFileName);
 	}
 	}

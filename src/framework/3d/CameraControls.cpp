@@ -63,9 +63,6 @@ CameraControls::CameraControls(CommonControls* commonControls, U32 features)
     m_inputPubSocket = zmq::socket_t(m_context, zmq::socket_type::pub);
     m_inputPubSocket.bind("tcp://*:5555");
 
-    m_router = zmq::socket_t(m_routerContext, zmq::socket_type::router);
-    m_router.bind("tcp://*:5556");
-
     // monitor connection/disconnection to input socket
     //monitorSocket = zmq::socket_t(m_inputPubContext, zmq::socket_type::pair);
     //assert(zmq_socket_monitor(m_inputPubSocket.handle(), "inproc://monitor", ZMQ_EVENT_ALL) == 0);
@@ -297,29 +294,6 @@ bool CameraControls::handleEvent(const Window::Event& ev)
     if (m_alignZ)
         m_up = Vec3f(0.0f, 0.0f, 1.0f);
     m_alignZ = false;
-
-    // send client state to initialize server or
-    // re-schedule load when some servers disconnect
-    zmq::message_t identity;
-    bool received = m_router.recv(identity, zmq::recv_flags::dontwait).has_value();
-    if (received) {
-        std::string clientID(static_cast<char*>(identity.data()), identity.size());
-
-        zmq::message_t request;
-        m_router.recv(request, zmq::recv_flags::dontwait);
-        std::string requestData(static_cast<char*>(request.data()), request.size());
-        std::cout << "Received from " << clientID << ": " << requestData << std::endl;
-
-        // send current client state
-        initState.m_position = m_position;
-        initState.m_forward = m_forward;
-        initState.m_up = m_up;
-        zmq::message_t message(sizeof(InitialState) + m_scene.getLength() + 1);
-        std::memcpy(message.data(), &initState, sizeof(InitialState));
-        std::memcpy(static_cast<char*>(message.data()) + sizeof(InitialState), m_scene.getPtr(), m_scene.getLength() + 1);
-        m_router.send(identity, zmq::send_flags::sndmore);
-        m_router.send(message, zmq::send_flags::none);
-    }
 
     // Update stereo mode.
 
