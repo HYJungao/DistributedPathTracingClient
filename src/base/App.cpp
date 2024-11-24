@@ -279,6 +279,8 @@ bool App::handleEvent(const Window::Event& ev)
 	if (ev.type == Window::EventType_Close)
 	{
 		m_window.showModalMessage("Exiting...");
+		bool temp[2] = { true, true };
+		m_cameraCtrl.sendControl(&temp, 2 * sizeof(bool));
 		delete this;
 		return true;
 	}
