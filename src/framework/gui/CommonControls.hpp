@@ -247,6 +247,9 @@ private:
     bool            m_dragging;
     F32             m_avgFrameTime;
     bool            m_screenshot;
+
+public:
+    String          m_currentScene;
 };
 
 //------------------------------------------------------------------------

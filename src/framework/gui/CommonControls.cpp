@@ -351,6 +351,8 @@ String CommonControls::getScreenshotFileName(void) const
 
 bool CommonControls::loadState(const String& fileName)
 {
+    m_currentScene = fileName;
+
     String oldError = clearError();
     StateDump dump;
 

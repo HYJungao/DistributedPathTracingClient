@@ -33,6 +33,22 @@
 
 namespace FW
 {
+
+struct InitialState
+{
+    Vec3f m_position;
+    Vec3f m_forward;
+    Vec3f m_up;
+    Vec3f m_lightPosition;
+    Mat3f m_lightOrientation;
+    bool m_RTMode = false;
+    bool m_JBF_server = false;
+    bool m_normalMapped = false;
+    bool m_useRussianRoulette = false;
+    int m_kernel = 6;
+    int m_spp_server = 4;
+    int m_numBounces = 1;
+};
 //------------------------------------------------------------------------
 
 class MeshBase;
@@ -165,6 +181,9 @@ public:
 
 public:
     void sendControl(const void* src, size_t size);
+
+    String m_scene;
+    InitialState initState;
 };
 
 //------------------------------------------------------------------------

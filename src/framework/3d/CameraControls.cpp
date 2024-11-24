@@ -311,9 +311,12 @@ bool CameraControls::handleEvent(const Window::Event& ev)
         std::cout << "Received from " << clientID << ": " << requestData << std::endl;
 
         // send current client state
-        Vec3f cameraParams[3] = { m_position, m_forward, m_up };
-        zmq::message_t message(3 * sizeof(Vec3f));
-        std::memcpy(message.data(), cameraParams, 3 * sizeof(Vec3f));
+        initState.m_position = m_position;
+        initState.m_forward = m_forward;
+        initState.m_up = m_up;
+        zmq::message_t message(sizeof(InitialState) + m_scene.getLength() + 1);
+        std::memcpy(message.data(), &initState, sizeof(InitialState));
+        std::memcpy(static_cast<char*>(message.data()) + sizeof(InitialState), m_scene.getPtr(), m_scene.getLength() + 1);
         m_router.send(identity, zmq::send_flags::sndmore);
         m_router.send(message, zmq::send_flags::none);
     }

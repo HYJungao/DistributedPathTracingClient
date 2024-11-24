@@ -276,7 +276,6 @@ bool App::handleEvent(const Window::Event& ev)
 		return true;
 	}
 
-
 	Action action = m_action;
 	m_action = Action_None;
 	String name;
@@ -443,6 +442,8 @@ bool App::handleEvent(const Window::Event& ev)
 	case Action_PlaceLightSourceAtCamera:
 		m_areaLight->setOrientation(m_cameraCtrl.getCameraToWorld().getXYZ());
 		m_areaLight->setPosition(m_cameraCtrl.getPosition());
+		m_cameraCtrl.initState.m_lightOrientation = m_areaLight->getOrientation();
+		m_cameraCtrl.initState.m_lightPosition = m_areaLight->getPosition();
 		m_commonCtrl.message("Placed light at camera");
 		break;
 
@@ -452,6 +453,13 @@ bool App::handleEvent(const Window::Event& ev)
 		{
 			control ctl = { m_RTMode, m_JBF_server, m_normalMapped, m_useRussianRoulette, m_kernel, m_spp_server, m_numBounces };
 			m_cameraCtrl.sendControl(&ctl, sizeof(control));
+			m_cameraCtrl.initState.m_RTMode = m_RTMode;
+			m_cameraCtrl.initState.m_JBF_server = m_JBF_server;
+			m_cameraCtrl.initState.m_normalMapped = m_normalMapped;
+			m_cameraCtrl.initState.m_useRussianRoulette = m_useRussianRoulette;
+			m_cameraCtrl.initState.m_kernel = m_kernel;
+			m_cameraCtrl.initState.m_spp_server = m_spp_server;
+			m_cameraCtrl.initState.m_numBounces = m_numBounces;
 			m_pathtrace_renderer->stop();
 			if (m_img.getSize() != m_window.getSize())
 			{
@@ -467,6 +475,7 @@ bool App::handleEvent(const Window::Event& ev)
 		}
 		else
 		{
+			m_cameraCtrl.initState.m_RTMode = m_RTMode;
 			m_cameraCtrl.sendControl(&m_RTMode, sizeof(bool));
 			m_pathtrace_renderer->stop();
 		}
@@ -523,6 +532,10 @@ void App::readState(StateDump& d)
 	m_lightSize = m_areaLight->getSize().x;	// dirty; doesn't allow for rectangular lights, only square. TODO
 
 	if (m_meshFileName != meshFileName && meshFileName.getLength()) {
+		m_cameraCtrl.sendControl(m_commonCtrl.m_currentScene.getPtr(), m_commonCtrl.m_currentScene.getLength() + 1);
+		m_cameraCtrl.m_scene = m_commonCtrl.m_currentScene;
+		m_cameraCtrl.initState.m_lightPosition = m_areaLight->getPosition();
+		m_cameraCtrl.initState.m_lightOrientation = m_areaLight->getOrientation();
 		loadMesh(meshFileName);
 	}
 	}
