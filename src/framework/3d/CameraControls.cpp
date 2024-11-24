@@ -33,6 +33,12 @@
 
 using namespace FW;
 
+struct CameraControl {
+    Vec3f rotate;
+    Vec3f move;
+    F32 fov;
+};
+
 //------------------------------------------------------------------------
 
 static const F32 s_mouseRotateSpeed = 0.005f;
@@ -252,11 +258,12 @@ bool CameraControls::handleEvent(const Window::Event& ev)
     //    }
     //}
 
-    if (hasMovement) {
-        // send client input
-        Vec3f movement[2] = { rotate, move };
-        zmq::message_t message(2 * sizeof(Vec3f));
-        std::memcpy(message.data(), movement, 2 * sizeof(Vec3f));
+    if (hasMovement || m_oldFov != m_fov) {
+        // send client 
+        m_oldFov = m_fov;
+        CameraControl ctl = { rotate, move, m_fov };
+        zmq::message_t message(sizeof(CameraControl));
+        std::memcpy(message.data(), &ctl, sizeof(CameraControl));
         m_inputPubSocket.send(message, zmq::send_flags::none);
         // std::cout << "input sent!" << std::endl;
     }

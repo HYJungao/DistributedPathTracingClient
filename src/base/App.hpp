@@ -27,6 +27,7 @@ struct InitialState
     Vec3f m_up;
     Vec3f m_lightPosition;
     Mat3f m_lightOrientation;
+    F32 m_fov;
     bool m_RTMode = false;
     bool m_JBF_server = false;
     bool m_normalMapped = false;

@@ -154,6 +154,8 @@ private:
     F32                 m_stereoSeparation;
     F32                 m_stereoConvergence;
 
+    F32                 m_oldFov;
+
 public:
     zmq::context_t m_context;
     zmq::socket_t m_inputPubSocket;
