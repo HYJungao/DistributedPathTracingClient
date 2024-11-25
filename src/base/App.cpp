@@ -476,6 +476,8 @@ bool App::handleEvent(const Window::Event& ev)
 			if (m_img.getSize() != m_window.getSize())
 			{
 				// Replace m_img with a new Image. TODO: Clean this up.
+				Vec2f tmp = m_window.getSize();
+				m_cameraCtrl.sendControl(&tmp, sizeof(Vec2f));
 				m_img.~Image();
 				new (&m_img) Image(m_window.getSize(), ImageFormat::RGBA_Vec4f);	// placement new, will get autodestructed
 			}
@@ -618,6 +620,8 @@ void App::renderFrame(GLContext* gl)
 		if (m_img.getSize() != m_window.getSize())
 		{
 			// Replace m_img with a new Image. TODO: Clean this up.
+			Vec2f tmp = m_window.getSize();
+			m_cameraCtrl.sendControl(&tmp, sizeof(Vec2f));
 			m_img.~Image();
 			new (&m_img) Image(m_window.getSize(), ImageFormat::RGBA_Vec4f);	// placement new, will get autodestructed
 		}
