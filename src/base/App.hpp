@@ -9,6 +9,9 @@
 
 #include <vector>
 #include <memory>
+#include <map>
+#include <set>
+#include <chrono>
 
 #include "RayTracer.hpp"
 
@@ -141,6 +144,8 @@ private:
 
 	void			blitRttToScreen(GLContext* gl);
 
+    void            scheduleBlockPartition();
+
 
 private:
                     App             (const App&); // forbidden
@@ -197,6 +202,11 @@ public:
 
     String m_scene;
     InitialState initState;
+
+    std::map<std::string, int> m_servers;
+    std::map<std::string, int> m_aliveServers;
+
+    std::chrono::steady_clock::time_point m_lastTimestamp;
 };
 
 

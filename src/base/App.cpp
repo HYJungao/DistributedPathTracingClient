@@ -15,7 +15,6 @@
 #include <conio.h>
 #include <map>
 #include <algorithm>
-#include <chrono>
 
 #include <iostream>
 #include <fstream>
@@ -152,6 +151,7 @@ App::App(std::vector<std::string>& cmd_args)
 	m_socket.set(zmq::sockopt::subscribe, "");
 
 	m_timer.start();
+	m_lastTimestamp = std::chrono::steady_clock::now();
 }
 
 // returns the index of the needle in the haystack or -1 if not found
@@ -520,6 +520,24 @@ bool App::handleEvent(const Window::Event& ev)
 	}
 
 
+	auto currentTimestamp = std::chrono::steady_clock::now();
+	if (std::chrono::duration_cast<std::chrono::seconds>(currentTimestamp - m_lastTimestamp).count() >= 3) {
+		if (m_servers.size() != m_aliveServers.size()) {
+			std::cout << "some servers is dead" << std::endl;
+
+			m_servers = std::move(m_aliveServers);
+			scheduleBlockPartition();
+		}
+
+		for (auto& it : m_servers) {
+			// send heart heat
+			m_router.send(zmq::buffer(it.first), zmq::send_flags::sndmore);
+			m_router.send(zmq::buffer("beat"), zmq::send_flags::none);
+		}
+		m_lastTimestamp = std::chrono::steady_clock::now();
+		m_aliveServers.clear();
+	}
+
 	// send client state to initialize server or
 	// re-schedule load when some servers disconnect
 	zmq::message_t identity;
@@ -528,20 +546,40 @@ bool App::handleEvent(const Window::Event& ev)
 		std::string clientID(static_cast<char*>(identity.data()), identity.size());
 
 		zmq::message_t request;
-		m_router.recv(request, zmq::recv_flags::dontwait);
+		m_router.recv(request, zmq::recv_flags::none);
 		std::string requestData(static_cast<char*>(request.data()), request.size());
 		std::cout << "Received from " << clientID << ": " << requestData << std::endl;
 
-		// send current client state
-		initState.m_position = m_cameraCtrl.getPosition();
-		initState.m_forward = m_cameraCtrl.getForward();
-		initState.m_up = m_cameraCtrl.getUp();
-		initState.m_fov = m_cameraCtrl.getFOV();
-		zmq::message_t message(sizeof(InitialState) + m_scene.getLength() + 1);
-		std::memcpy(message.data(), &initState, sizeof(InitialState));
-		std::memcpy(static_cast<char*>(message.data()) + sizeof(InitialState), m_scene.getPtr(), m_scene.getLength() + 1);
-		m_router.send(identity, zmq::send_flags::sndmore);
-		m_router.send(message, zmq::send_flags::none);
+		if (m_servers.find(clientID) != m_servers.end()) {
+			m_aliveServers.emplace(clientID, m_servers[clientID]);
+			std::cout << "receive heart beat from" << clientID << std::endl;
+		}
+		else {
+			m_servers.emplace(clientID, m_servers.size() + 1);
+			m_aliveServers.emplace(clientID, m_servers[clientID]);
+
+			// send current client state
+			initState.m_position = m_cameraCtrl.getPosition();
+			initState.m_forward = m_cameraCtrl.getForward();
+			initState.m_up = m_cameraCtrl.getUp();
+			initState.m_fov = m_cameraCtrl.getFOV();
+			zmq::message_t message(sizeof(InitialState) + m_scene.getLength() + 1);
+			std::memcpy(message.data(), &initState, sizeof(InitialState));
+			std::memcpy(static_cast<char*>(message.data()) + sizeof(InitialState), m_scene.getPtr(), m_scene.getLength() + 1);
+			m_router.send(identity, zmq::send_flags::sndmore);
+			m_router.send(message, zmq::send_flags::none);
+		}
+
+		//// send current client state
+		//initState.m_position = m_cameraCtrl.getPosition();
+		//initState.m_forward = m_cameraCtrl.getForward();
+		//initState.m_up = m_cameraCtrl.getUp();
+		//initState.m_fov = m_cameraCtrl.getFOV();
+		//zmq::message_t message(sizeof(InitialState) + m_scene.getLength() + 1);
+		//std::memcpy(message.data(), &initState, sizeof(InitialState));
+		//std::memcpy(static_cast<char*>(message.data()) + sizeof(InitialState), m_scene.getPtr(), m_scene.getLength() + 1);
+		//m_router.send(identity, zmq::send_flags::sndmore);
+		//m_router.send(message, zmq::send_flags::none);
 	}
 
 	m_window.setVisible(true);
@@ -553,6 +591,11 @@ bool App::handleEvent(const Window::Event& ev)
 		}
 
 //------------------------------------------------------------------------
+
+void App::scheduleBlockPartition()
+{
+
+}
 
 void App::readState(StateDump& d)
 {
