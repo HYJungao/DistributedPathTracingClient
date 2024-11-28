@@ -526,14 +526,29 @@ bool App::handleEvent(const Window::Event& ev)
 			std::cout << "some servers is dead" << std::endl;
 
 			m_servers = std::move(m_aliveServers);
-			scheduleBlockPartition();
+
+			int blockId = 0;
+			int blockNum = m_servers.size();
+			for (auto& it : m_servers) {
+				zmq::message_t message(sizeof(int) * 2);
+				std::memcpy(static_cast<int*>(message.data()), &blockId, sizeof(int));
+				std::memcpy(static_cast<int*>(message.data()) + 1, &blockNum, sizeof(int));
+
+				m_router.send(zmq::buffer(it.first), zmq::send_flags::sndmore);
+				m_router.send(message, zmq::send_flags::none);
+
+				it.second = blockId;
+				blockId++;
+			}
+		}
+		else {
+			for (auto& it : m_servers) {
+				// send heart heat
+				m_router.send(zmq::buffer(it.first), zmq::send_flags::sndmore);
+				m_router.send(zmq::buffer("1"), zmq::send_flags::none);
+			}
 		}
 
-		for (auto& it : m_servers) {
-			// send heart heat
-			m_router.send(zmq::buffer(it.first), zmq::send_flags::sndmore);
-			m_router.send(zmq::buffer("beat"), zmq::send_flags::none);
-		}
 		m_lastTimestamp = std::chrono::steady_clock::now();
 		m_aliveServers.clear();
 	}
@@ -548,15 +563,14 @@ bool App::handleEvent(const Window::Event& ev)
 		zmq::message_t request;
 		m_router.recv(request, zmq::recv_flags::none);
 		std::string requestData(static_cast<char*>(request.data()), request.size());
-		std::cout << "Received from " << clientID << ": " << requestData << std::endl;
+		// std::cout << "Received from " << clientID << ": " << requestData << std::endl;
 
 		if (m_servers.find(clientID) != m_servers.end()) {
 			m_aliveServers.emplace(clientID, m_servers[clientID]);
-			std::cout << "receive heart beat from" << clientID << std::endl;
+			// std::cout << "receive heart beat from" << clientID << std::endl;
 		}
 		else {
-			m_servers.emplace(clientID, m_servers.size() + 1);
-			m_aliveServers.emplace(clientID, m_servers[clientID]);
+			int blockNum = m_servers.size() + 1;
 
 			// send current client state
 			initState.m_position = m_cameraCtrl.getPosition();
@@ -564,11 +578,18 @@ bool App::handleEvent(const Window::Event& ev)
 			initState.m_up = m_cameraCtrl.getUp();
 			initState.m_size = m_window.getSize();
 			initState.m_fov = m_cameraCtrl.getFOV();
+			initState.m_blockId = m_servers.size();
+			initState.m_blockNum = blockNum;
 			zmq::message_t message(sizeof(InitialState) + m_scene.getLength() + 1);
 			std::memcpy(message.data(), &initState, sizeof(InitialState));
 			std::memcpy(static_cast<char*>(message.data()) + sizeof(InitialState), m_scene.getPtr(), m_scene.getLength() + 1);
 			m_router.send(identity, zmq::send_flags::sndmore);
 			m_router.send(message, zmq::send_flags::none);
+
+			m_cameraCtrl.sendControl(&blockNum, sizeof(int));
+
+			m_servers.emplace(clientID, m_servers.size());
+			m_aliveServers.emplace(clientID, m_servers[clientID]);
 		}
 
 		//// send current client state
@@ -595,7 +616,14 @@ bool App::handleEvent(const Window::Event& ev)
 
 void App::scheduleBlockPartition()
 {
-
+	int blockId = 0;
+	int msg[2] = { 0, m_servers.size() };
+	for (auto& it : m_servers) {
+		msg[0] = blockId;
+		m_cameraCtrl.sendControl(msg, 2 * sizeof(blockId));
+		it.second = blockId;
+		blockId++;
+	}
 }
 
 void App::readState(StateDump& d)

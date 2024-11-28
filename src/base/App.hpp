@@ -39,6 +39,8 @@ struct InitialState
     int m_kernel = 6;
     int m_spp_server = 4;
     int m_numBounces = 1;
+    int m_blockId = 0;
+    int m_blockNum = 0;
 };
 
 //------------------------------------------------------------------------
