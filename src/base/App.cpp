@@ -562,6 +562,7 @@ bool App::handleEvent(const Window::Event& ev)
 			initState.m_position = m_cameraCtrl.getPosition();
 			initState.m_forward = m_cameraCtrl.getForward();
 			initState.m_up = m_cameraCtrl.getUp();
+			initState.m_size = m_window.getSize();
 			initState.m_fov = m_cameraCtrl.getFOV();
 			zmq::message_t message(sizeof(InitialState) + m_scene.getLength() + 1);
 			std::memcpy(message.data(), &initState, sizeof(InitialState));
