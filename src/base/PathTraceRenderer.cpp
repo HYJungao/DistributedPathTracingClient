@@ -351,6 +351,8 @@ void PathTraceRenderer::startPathTracingProcess( const MeshWithColors* scene, Ar
 
     // Fire away!
 
+    // std::cout << "hehe" << std::endl;
+
     // If you change this, change the one in checkFinish too.
     m_launcher.setNumThreads(m_launcher.getNumCores());
     //m_launcher.setNumThreads(1);
@@ -359,18 +361,18 @@ void PathTraceRenderer::startPathTracingProcess( const MeshWithColors* scene, Ar
     m_launcher.push( pathTraceBlock, &m_context, 0, (int)m_context.m_blocks.size() );
 }
 
-void PathTraceRenderer::blendFrame(Image* dest)
+void PathTraceRenderer::blendFrame(Image* dest, int vStart, int vHeight)
 {
 #pragma omp parallel for
-    for (int i = 0; i < dest->getSize().y; ++i)
+    for (int i = 0; i < vHeight; ++i)
     {
         for (int j = 0; j < dest->getSize().x; ++j)
         {
-            Vec4f D = m_context.m_image->getVec4f(Vec2i(j, i));
+            Vec4f D = m_context.m_image->getVec4f(Vec2i(j, i + vStart));
 
-            D.x += pixelColor[j * dest->getSize().y + i].r;
-            D.y += pixelColor[j * dest->getSize().y + i].g;
-            D.z += pixelColor[j * dest->getSize().y + i].b;
+            D.x += pixelColor[i * dest->getSize().x + j].r;
+            D.y += pixelColor[i * dest->getSize().x + j].g;
+            D.z += pixelColor[i * dest->getSize().x + j].b;
 
             if (D.w != 0.0f)
                 D = D * (1.0f / D.w);
@@ -383,7 +385,7 @@ void PathTraceRenderer::blendFrame(Image* dest)
                 D.w
             );
 
-            dest->setVec4f(Vec2i(j, i), color);
+            dest->setVec4f(Vec2i(j, i + vStart), color);
         }
     }
 }

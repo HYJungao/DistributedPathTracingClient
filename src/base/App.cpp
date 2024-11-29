@@ -57,9 +57,13 @@ App::App(std::vector<std::string>& cmd_args)
 	m_normalMapped(false),
 	m_img(Vec2i(10, 10), ImageFormat::RGBA_Vec4f) // will get resized immediately
 {
-
+	m_routerContext = zmq::context_t(1);
 	m_router = zmq::socket_t(m_routerContext, zmq::socket_type::router);
 	m_router.bind("tcp://*:5556");
+
+	m_frameContext = zmq::context_t(1);
+	m_frameRouter = zmq::socket_t(m_frameContext, zmq::socket_type::router);
+	m_frameRouter.bind("tcp://*:5557");
 
 	m_commonCtrl.showFPS(true);
 	m_commonCtrl.addStateObject(this);
@@ -144,11 +148,6 @@ App::App(std::vector<std::string>& cmd_args)
 	process_args(cmd_args);
 
 	m_commonCtrl.loadState(m_commonCtrl.getStateFileName(1));
-
-	m_context = zmq::context_t(1);
-	m_socket = zmq::socket_t(m_context, zmq::socket_type::sub);
-	m_socket.connect("tcp://localhost:5557");
-	m_socket.set(zmq::sockopt::subscribe, "");
 
 	m_timer.start();
 	m_lastTimestamp = std::chrono::steady_clock::now();
@@ -521,7 +520,7 @@ bool App::handleEvent(const Window::Event& ev)
 
 
 	auto currentTimestamp = std::chrono::steady_clock::now();
-	if (std::chrono::duration_cast<std::chrono::seconds>(currentTimestamp - m_lastTimestamp).count() >= 3) {
+	if (std::chrono::duration_cast<std::chrono::seconds>(currentTimestamp - m_lastTimestamp).count() >= 6) {
 		if (m_servers.size() != m_aliveServers.size()) {
 			std::cout << "some servers is dead" << std::endl;
 
@@ -613,18 +612,6 @@ bool App::handleEvent(const Window::Event& ev)
 		}
 
 //------------------------------------------------------------------------
-
-void App::scheduleBlockPartition()
-{
-	int blockId = 0;
-	int msg[2] = { 0, m_servers.size() };
-	for (auto& it : m_servers) {
-		msg[0] = blockId;
-		m_cameraCtrl.sendControl(msg, 2 * sizeof(blockId));
-		it.second = blockId;
-		blockId++;
-	}
-}
 
 void App::readState(StateDump& d)
 {
@@ -722,14 +709,28 @@ void App::renderFrame(GLContext* gl)
 		}
 		else 
 		{
-			zmq::message_t message;
-			bool received = m_socket.recv(message, zmq::recv_flags::dontwait).has_value();
-
+			
+			zmq::message_t identity;
+			bool received = m_frameRouter.recv(identity, zmq::recv_flags::dontwait).has_value();
 			if (received) {
-				std::cout << "Received frame" << std::endl;
-				m_pathtrace_renderer->pixelColor.resize(m_img.getSize().y * m_img.getSize().x);
-				memcpy(m_pathtrace_renderer->pixelColor.data(), message.data(), message.size());
-				m_pathtrace_renderer->blendFrame(&m_img);
+				std::string clientID(static_cast<char*>(identity.data()), identity.size());
+
+				zmq::message_t frame;
+				m_frameRouter.recv(frame, zmq::recv_flags::none);
+
+				// std::cout << "Received frame" << std::endl;
+
+				int blockId = m_servers[clientID];
+				int blockNum = m_servers.size();
+
+				int image_height = m_img.getSize().y;
+				int vBlockHeight = image_height / blockNum;
+				int vBlockStart = blockId * vBlockHeight;
+				int vHeight = blockId == blockNum - 1 ? image_height - vBlockStart : vBlockHeight;
+
+				m_pathtrace_renderer->pixelColor.resize(vHeight * m_img.getSize().x);
+				memcpy(m_pathtrace_renderer->pixelColor.data(), frame.data(), frame.size());
+				m_pathtrace_renderer->blendFrame(&m_img, vBlockStart, vHeight);
 			}
 		}
 

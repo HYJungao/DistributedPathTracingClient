@@ -147,9 +147,6 @@ private:
 
 	void			blitRttToScreen(GLContext* gl);
 
-    void            scheduleBlockPartition();
-
-
 private:
                     App             (const App&); // forbidden
     App&            operator=       (const App&); // forbidden
@@ -197,8 +194,8 @@ private:
     int                                 m_spp_server;
 
 public:
-    zmq::context_t m_context;
-    zmq::socket_t m_socket;
+    zmq::context_t m_frameContext;
+    zmq::socket_t m_frameRouter;
 
     zmq::context_t m_routerContext;
     zmq::socket_t m_router;

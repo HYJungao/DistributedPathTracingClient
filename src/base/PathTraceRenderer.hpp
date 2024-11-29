@@ -109,7 +109,7 @@ public:
 	static void			pathTraceBlock(MulticoreLauncher::Task& t);
 	static void			getTextureParameters(const RaycastResult& hit, Vec3f& diffuse, Vec3f& n, Vec3f& specular);
     void				updatePicture						( Image* display );	// normalize by 1/w
-    void				blendFrame(Image* display);
+    void				blendFrame(Image* dest, int vStart, int vHeight);
     void				denoise                             (Image* display);
     void				checkFinish							( void );
     void				stop								( void );
